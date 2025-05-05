@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test - Watch History</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        .card {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #3b78e7;
+        }
+        .result {
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            overflow-x: auto;
+        }
+        .success {
+            color: #4caf50;
+        }
+        .error {
+            color: #f44336;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            margin-right: 5px;
+        }
+        .tab.active {
+            background-color: #f5f5f5;
+            border-color: #ddd;
+            border-bottom-color: white;
+            margin-bottom: -1px;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>API Testing - Lịch sử xem</h1>
+    
+    <div class="card">
+        <h2>Thông tin xác thực</h2>
+        <div class="form-group">
+            <label for="token">JWT Token:</label>
+            <input type="text" id="token" placeholder="Nhập JWT token của bạn tại đây">
+        </div>
+        <button id="loadTokenFromLocalStorage">Tải Token từ LocalStorage</button>
+        <button id="testAuthentication">Kiểm tra xác thực</button>
+        <div id="authResult" class="result"></div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" data-tab="watchHistoryGet">GET - Lấy lịch sử xem</div>
+        <div class="tab" data-tab="watchHistoryPost">POST - Thêm vào lịch sử</div>
+        <div class="tab" data-tab="watchHistoryDelete">DELETE - Xóa khỏi lịch sử</div>
+        <div class="tab" data-tab="watchHistoryCheck">CHECK - Kiểm tra video</div>
+        <div class="tab" data-tab="publicTest">Kiểm tra PUBLIC API</div>
+    </div>
+
+    <div id="watchHistoryGet" class="tab-content active">
+        <div class="card">
+            <h2>GET - Lấy danh sách lịch sử xem</h2>
+            <button id="getWatchHistory">Lấy lịch sử xem</button>
+            <div id="getWatchHistoryResult" class="result"></div>
+        </div>
+    </div>
+
+    <div id="watchHistoryPost" class="tab-content">
+        <div class="card">
+            <h2>POST - Thêm video vào lịch sử xem</h2>
+            <div class="form-group">
+                <label for="videoId">Video ID:</label>
+                <input type="text" id="videoId" value="dQw4w9WgXcQ" placeholder="VD: dQw4w9WgXcQ">
+            </div>
+            <div class="form-group">
+                <label for="videoTitle">Tiêu đề:</label>
+                <input type="text" id="videoTitle" value="Rick Astley - Never Gonna Give You Up" placeholder="Tiêu đề video">
+            </div>
+            <div class="form-group">
+                <label for="videoDescription">Mô tả:</label>
+                <textarea id="videoDescription" rows="3" placeholder="Mô tả video">Official music video for Rick Astley - Never Gonna Give You Up</textarea>
+            </div>
+            <div class="form-group">
+                <label for="thumbnailUrl">URL Thumbnail:</label>
+                <input type="text" id="thumbnailUrl" value="https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg" placeholder="URL hình thu nhỏ">
+            </div>
+            <div class="form-group">
+                <label for="channelTitle">Tên kênh:</label>
+                <input type="text" id="channelTitle" value="Rick Astley" placeholder="Tên kênh">
+            </div>
+            <button id="addToWatchHistory">Thêm vào lịch sử xem</button>
+            <div id="addToWatchHistoryResult" class="result"></div>
+        </div>
+    </div>
+
+    <div id="watchHistoryDelete" class="tab-content">
+        <div class="card">
+            <h2>DELETE - Xóa video khỏi lịch sử xem</h2>
+            <div class="form-group">
+                <label for="deleteVideoId">Video ID cần xóa:</label>
+                <input type="text" id="deleteVideoId" value="dQw4w9WgXcQ" placeholder="VD: dQw4w9WgXcQ">
+            </div>
+            <button id="removeFromWatchHistory">Xóa khỏi lịch sử</button>
+            <button id="clearWatchHistory">Xóa toàn bộ lịch sử</button>
+            <div id="deleteWatchHistoryResult" class="result"></div>
+        </div>
+    </div>
+
+    <div id="watchHistoryCheck" class="tab-content">
+        <div class="card">
+            <h2>CHECK - Kiểm tra video trong lịch sử</h2>
+            <div class="form-group">
+                <label for="checkVideoId">Video ID cần kiểm tra:</label>
+                <input type="text" id="checkVideoId" value="dQw4w9WgXcQ" placeholder="VD: dQw4w9WgXcQ">
+            </div>
+            <button id="checkWatchHistory">Kiểm tra video</button>
+            <div id="checkWatchHistoryResult" class="result"></div>
+        </div>
+    </div>
+
+    <div id="publicTest" class="tab-content">
+        <div class="card">
+            <h2>Kiểm tra các Public API</h2>
+            <button id="testPublicApi">Kiểm tra public API</button>
+            <button id="testHistoryStatus">Kiểm tra trạng thái API lịch sử</button>
+            <div id="publicApiResult" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Base URL for API
+        const API_BASE_URL = 'http://localhost:8080/api';
+        const WATCH_HISTORY_URL = `${API_BASE_URL}/videos/history`;
+        
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+        
+        // Load token from localStorage
+        document.getElementById('loadTokenFromLocalStorage').addEventListener('click', () => {
+            try {
+                const user = JSON.parse(localStorage.getItem('user'));
+                if (user && user.accessToken) {
+                    document.getElementById('token').value = user.accessToken;
+                    document.getElementById('authResult').innerHTML = `<div class="success">Token loaded from localStorage for user: ${user.username || user.email}</div>`;
+                } else {
+                    document.getElementById('authResult').innerHTML = '<div class="error">No token found in localStorage. Please login first.</div>';
+                }
+            } catch (error) {
+                document.getElementById('authResult').innerHTML = `<div class="error">Error loading token: ${error.message}</div>`;
+            }
+        });
+        
+        // Test authentication
+        document.getElementById('testAuthentication').addEventListener('click', async () => {
+            const token = document.getElementById('token').value;
+            const resultDiv = document.getElementById('authResult');
+            
+            if (!token) {
+                resultDiv.innerHTML = '<div class="error">Please enter a token or load it from localStorage</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<div>Testing authentication...</div>';
+            
+            try {
+                const response = await axios.get(`${API_BASE_URL}/test/all`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                resultDiv.innerHTML = `
+                    <div class="success">Authentication successful!</div>
+                    <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                handleApiError(error, resultDiv);
+            }
+        });
+        
+        // GET - Watch History
+        document.getElementById('getWatchHistory').addEventListener('click', async () => {
+            const token = document.getElementById('token').value;
+            const resultDiv = document.getElementById('getWatchHistoryResult');
+            
+            if (!token) {
+                resultDiv.innerHTML = '<div class="error">Please enter a token or load it from localStorage</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<div>Fetching watch history...</div>';
+            
+            try {
+                const response = await axios.get(WATCH_HISTORY_URL, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                resultDiv.innerHTML = `
+                    <div class="success">Successfully retrieved ${response.data.length} videos from watch history</div>
+                    <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                handleApiError(error, resultDiv);
+            }
+        });
+        
+        // POST - Add to Watch History
+        document.getElementById('addToWatchHistory').addEventListener('click', async () => {
+            const token = document.getElementById('token').value;
+            const resultDiv = document.getElementById('addToWatchHistoryResult');
+            
+            if (!token) {
+                resultDiv.innerHTML = '<div class="error">Please enter a token or load it from localStorage</div>';
+                return;
+            }
+            
+            const videoData = {
+                videoId: document.getElementById('videoId').value,
+                title: document.getElementById('videoTitle').value,
+                description: document.getElementById('videoDescription').value,
+                thumbnailUrl: document.getElementById('thumbnailUrl').value,
+                channelTitle: document.getElementById('channelTitle').value
+            };
+            
+            resultDiv.innerHTML = '<div>Adding video to watch history...</div>';
+            
+            try {
+                const response = await axios.post(WATCH_HISTORY_URL, videoData, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                resultDiv.innerHTML = `
+                    <div class="success">Successfully added video to watch history</div>
+                    <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                handleApiError(error, resultDiv);
+            }
+        });
+        
+        // DELETE - Remove from Watch History
+        document.getElementById('removeFromWatchHistory').addEventListener('click', async () => {
+            const token = document.getElementById('token').value;
+            const videoId = document.getElementById('deleteVideoId').value;
+            const resultDiv = document.getElementById('deleteWatchHistoryResult');
+            
+            if (!token) {
+                resultDiv.innerHTML = '<div class="error">Please enter a token or load it from localStorage</div>';
+                return;
+            }
+            
+            if (!videoId) {
+                resultDiv.innerHTML = '<div class="error">Please enter a video ID</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<div>Removing video from watch history...</div>';
+            
+            try {
+                const response = await axios.delete(`${WATCH_HISTORY_URL}/${videoId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                resultDiv.innerHTML = `
+                    <div class="success">Successfully removed video from watch history</div>
+                    <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                handleApiError(error, resultDiv);
+            }
+        });
+        
+        // DELETE - Clear Watch History
+        document.getElementById('clearWatchHistory').addEventListener('click', async () => {
+            const token = document.getElementById('token').value;
+            const resultDiv = document.getElementById('deleteWatchHistoryResult');
+            
+            if (!token) {
+                resultDiv.innerHTML = '<div class="error">Please enter a token or load it from localStorage</div>';
+                return;
+            }
+            
+            if (!confirm('Are you sure you want to clear all watch history? This action cannot be undone.')) {
+                return;
+            }
+            
+            resultDiv.innerHTML = '<div>Clearing watch history...</div>';
+            
+            try {
+                const response = await axios.delete(`${WATCH_HISTORY_URL}/clear`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                resultDiv.innerHTML = `
+                    <div class="success">Successfully cleared watch history</div>
+                    <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                handleApiError(error, resultDiv);
+            }
+        });
+        
+        // CHECK - Check if video is in Watch History
+        document.getElementById('checkWatchHistory').addEventListener('click', async () => {
+            const token = document.getElementById('token').value;
+            const videoId = document.getElementById('checkVideoId').value;
+            const resultDiv = document.getElementById('checkWatchHistoryResult');
+            
+            if (!token) {
+                resultDiv.innerHTML = '<div class="error">Please enter a token or load it from localStorage</div>';
+                return;
+            }
+            
+            if (!videoId) {
+                resultDiv.innerHTML = '<div class="error">Please enter a video ID</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<div>Checking if video is in watch history...</div>';
+            
+            try {
+                const response = await axios.get(`${WATCH_HISTORY_URL}/${videoId}/check`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const isInWatchHistory = response.data;
+                
+                resultDiv.innerHTML = `
+                    <div class="${isInWatchHistory ? 'success' : 'error'}">
+                        Video ${isInWatchHistory ? 'is' : 'is not'} in watch history
+                    </div>
+                    <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                handleApiError(error, resultDiv);
+            }
+        });
+        
+        // Test Public API
+        document.getElementById('testPublicApi').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('publicApiResult');
+            
+            resultDiv.innerHTML = '<div>Testing public API...</div>';
+            
+            try {
+                const response = await axios.get(`${API_BASE_URL}/test/all`);
+                
+                resultDiv.innerHTML = `
+                    <div class="success">Public API is working</div>
+                    <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                handleApiError(error, resultDiv);
+            }
+        });
+        
+        // Test History Status
+        document.getElementById('testHistoryStatus').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('publicApiResult');
+            
+            resultDiv.innerHTML = '<div>Testing history status API...</div>';
+            
+            try {
+                const response = await axios.get(`${API_BASE_URL}/test/watch-history-test`);
+                
+                resultDiv.innerHTML = `
+                    <div class="success">History status API is working</div>
+                    <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                handleApiError(error, resultDiv);
+            }
+        });
+        
+        // Helper for handling API errors
+        function handleApiError(error, resultDiv) {
+            let errorMessage = 'An unknown error occurred';
+            
+            if (error.response) {
+                // The request was made and the server responded with a status code
+                // that falls out of the range of 2xx
+                errorMessage = `Server responded with status ${error.response.status}: ${JSON.stringify(error.response.data)}`;
+            } else if (error.request) {
+                // The request was made but no response was received
+                errorMessage = 'No response received from server. Is the backend running?';
+            } else {
+                // Something happened in setting up the request that triggered an Error
+                errorMessage = error.message;
+            }
+            
+            resultDiv.innerHTML = `<div class="error">${errorMessage}</div>`;
+        }
+    </script>
+</body>
+</html> 
