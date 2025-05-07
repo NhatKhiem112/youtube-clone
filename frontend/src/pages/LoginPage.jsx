@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useHistory, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import styled from 'styled-components/macro';
@@ -19,6 +19,14 @@ const LoginPage = () => {
     const [error, setError] = useState('');
     const { login } = useAuth();
     const history = useHistory();
+    const isMounted = useRef(true);
+
+    // Thiết lập cleanup khi component unmount
+    useEffect(() => {
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -32,11 +40,17 @@ const LoginPage = () => {
         try {
             setLoading(true);
             await login(username, password);
-            history.push('/');
+            if (isMounted.current) {
+                history.push('/');
+            }
         } catch (err) {
-            setError(err.response?.data?.message || 'Failed to sign in');
+            if (isMounted.current) {
+                setError(err.response?.data?.message || 'Failed to sign in');
+            }
         } finally {
-            setLoading(false);
+            if (isMounted.current) {
+                setLoading(false);
+            }
         }
     };
 

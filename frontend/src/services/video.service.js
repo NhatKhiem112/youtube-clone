@@ -61,33 +61,53 @@ class VideoService {
             // Hiển thị thông tin người dùng đang thao tác
             const user = this._getCurrentUserInfo();
             console.log(`Liking video by user: ${user?.username || user?.email}`);
-            console.log(`Making request to: ${LIKES_URL}`);
-
-            // Truncate description if it's too long (limit to 1000 chars to be safe)
-            const description = videoData.description ?
-                videoData.description.substring(0, 1000) : '';
-
-            const requestData = {
-                videoId: videoData.videoId,
-                title: videoData.title,
-                description: description,
-                thumbnailUrl: videoData.thumbnailUrl || '',
-                channelTitle: videoData.channelTitle || ''
-            };
             
-            console.log(`Request payload: ${JSON.stringify(requestData)}`);
+            // Make sure videoId is a string, not an object
+            const videoId = typeof videoData === 'object' ? videoData.videoId : videoData;
+            
+            if (!videoId) {
+                throw new Error("Invalid video ID");
+            }
+            
+            console.log(`Liking video with ID: ${videoId}`);
+            
+            // If full object is provided, use it with the LIKES_URL endpoint
+            if (typeof videoData === 'object' && videoData.title) {
+                // Truncate description if it's too long (limit to 1000 chars to be safe)
+                const description = videoData.description ?
+                    videoData.description.substring(0, 1000) : '';
 
-            const response = await axios.post(
-                LIKES_URL,
-                requestData,
-                {
-                    headers: header
-                }
-            );
-            console.log(`Successfully liked video ${videoData.videoId}`);
-            return response.data;
+                const requestData = {
+                    videoId: videoId,
+                    title: videoData.title,
+                    description: description,
+                    thumbnailUrl: videoData.thumbnailUrl || '',
+                    channelTitle: videoData.channelTitle || ''
+                };
+                
+                console.log(`Request payload: ${JSON.stringify(requestData)}`);
+
+                const response = await axios.post(
+                    LIKES_URL,
+                    requestData,
+                    {
+                        headers: header
+                    }
+                );
+                console.log(`Successfully liked video ${videoId}`);
+                return response.data;
+            } else {
+                // If just the videoId is provided, use the simpler endpoint
+                const response = await axios.post(
+                    `/api/videos/${videoId}/like`, 
+                    {}, 
+                    { headers: header }
+                );
+                console.log(`Successfully liked video ${videoId}`);
+                return response.data;
+            }
         } catch (error) {
-            console.error("Error liking video:", error);
+            console.error(`Error liking video with ID ${typeof videoData === 'object' ? videoData.videoId : videoData}:`, error);
             
             // Ghi log thêm thông tin chi tiết về lỗi
             if (error.response) {
@@ -320,33 +340,53 @@ class VideoService {
             // Hiển thị thông tin người dùng đang thao tác
             const user = this._getCurrentUserInfo();
             console.log(`Disliking video by user: ${user?.username || user?.email}`);
-            console.log(`Making request to: ${DISLIKES_URL}`);
-
-            // Truncate description if it's too long (limit to 1000 chars to be safe)
-            const description = videoData.description ?
-                videoData.description.substring(0, 1000) : '';
-
-            const requestData = {
-                videoId: videoData.videoId,
-                title: videoData.title,
-                description: description,
-                thumbnailUrl: videoData.thumbnailUrl || '',
-                channelTitle: videoData.channelTitle || ''
-            };
             
-            console.log(`Request payload: ${JSON.stringify(requestData)}`);
+            // Make sure videoId is a string, not an object
+            const videoId = typeof videoData === 'object' ? videoData.videoId : videoData;
+            
+            if (!videoId) {
+                throw new Error("Invalid video ID");
+            }
+            
+            console.log(`Disliking video with ID: ${videoId}`);
 
-            const response = await axios.post(
-                DISLIKES_URL,
-                requestData,
-                {
-                    headers: header
-                }
-            );
-            console.log(`Successfully disliked video ${videoData.videoId}`);
-            return response.data;
+            // If full object is provided, use it with the DISLIKES_URL endpoint
+            if (typeof videoData === 'object' && videoData.title) {
+                // Truncate description if it's too long (limit to 1000 chars to be safe)
+                const description = videoData.description ?
+                    videoData.description.substring(0, 1000) : '';
+
+                const requestData = {
+                    videoId: videoId,
+                    title: videoData.title,
+                    description: description,
+                    thumbnailUrl: videoData.thumbnailUrl || '',
+                    channelTitle: videoData.channelTitle || ''
+                };
+                
+                console.log(`Request payload: ${JSON.stringify(requestData)}`);
+
+                const response = await axios.post(
+                    DISLIKES_URL,
+                    requestData,
+                    {
+                        headers: header
+                    }
+                );
+                console.log(`Successfully disliked video ${videoId}`);
+                return response.data;
+            } else {
+                // If just the videoId is provided, use the simpler endpoint
+                const response = await axios.post(
+                    `/api/videos/${videoId}/dislike`, 
+                    {}, 
+                    { headers: header }
+                );
+                console.log(`Successfully disliked video ${videoId}`);
+                return response.data;
+            }
         } catch (error) {
-            console.error("Error disliking video:", error);
+            console.error(`Error disliking video with ID ${typeof videoData === 'object' ? videoData.videoId : videoData}:`, error);
             
             // Ghi log thêm thông tin chi tiết về lỗi
             if (error.response) {
@@ -791,45 +831,6 @@ class VideoService {
         }
     }
 
-    // Like a video
-    async likeVideo(id) {
-        try {
-            const response = await axios.post(`/api/videos/${id}/like`, {}, {
-                headers: authHeader()
-            });
-            return response.data;
-        } catch (error) {
-            console.error(`Error liking video with ID ${id}:`, error);
-            throw error;
-        }
-    }
-
-    // Dislike a video
-    async dislikeVideo(id) {
-        try {
-            const response = await axios.post(`/api/videos/${id}/dislike`, {}, {
-                headers: authHeader()
-            });
-            return response.data;
-        } catch (error) {
-            console.error(`Error disliking video with ID ${id}:`, error);
-            throw error;
-        }
-    }
-
-    // Add to watch later
-    async addToWatchLater(id) {
-        try {
-            const response = await axios.post(`/api/videos/${id}/watchlater`, {}, {
-                headers: authHeader()
-            });
-            return response.data;
-        } catch (error) {
-            console.error(`Error adding video with ID ${id} to watch later:`, error);
-            throw error;
-        }
-    }
-
     // Get moderation status
     async getModerationStatus(id) {
         try {
@@ -860,6 +861,27 @@ class VideoService {
             console.error(`Error resubmitting video ${id} for review:`, error);
             throw error;
         }
+    }
+
+    // Hàm tiện ích để đảm bảo URL thumbnail đúng
+    _getFullThumbnailUrl(thumbnailUrl) {
+        if (!thumbnailUrl) return null;
+        
+        // Nếu đã là URL đầy đủ
+        if (thumbnailUrl.startsWith('http')) {
+            return thumbnailUrl;
+        }
+        
+        // Thêm base URL cho thumbnail
+        return `http://localhost:8080${thumbnailUrl}`;
+    }
+
+    convertToVideoResponse(video) {
+        const videoResponse = { ...video };
+        if (videoResponse.thumbnailUrl) {
+            videoResponse.thumbnailUrl = this._getFullThumbnailUrl(videoResponse.thumbnailUrl);
+        }
+        return videoResponse;
     }
 }
 

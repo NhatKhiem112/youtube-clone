@@ -351,19 +351,24 @@ const VideoPage = () => {
           severity: 'info'
         });
       } else {
-        // If the video is disliked, undislike it first
         if (isDisliked) {
           await VideoService.undislikeVideo(videoId);
           setIsDisliked(false);
         }
         
         const videoData = {
-          videoId,
+          videoId: videoId,
           title: video?.snippet?.title || '',
           description: video?.snippet?.description || '',
           thumbnailUrl: video?.snippet?.thumbnails?.high?.url || '',
           channelTitle: video?.snippet?.channelTitle || ''
         };
+        
+        console.log("Liking video with data:", JSON.stringify({
+          videoId: videoData.videoId,
+          title: videoData.title.substring(0, 30) + '...'
+        }));
+        
         await VideoService.likeVideo(videoData);
         setIsLiked(true);
         setNotification({
@@ -379,9 +384,13 @@ const VideoPage = () => {
       if (error.response) {
         if (error.response.status === 404) {
           errorMessage = "The like service is unavailable. Please try again later.";
+        } else if (error.response.status === 0 || error.response.status === 'cors') {
+          errorMessage = "CORS error: The backend server is not accessible. Please check that it's running and properly configured.";
         } else if (error.response.data && error.response.data.message) {
           errorMessage = error.response.data.message;
         }
+      } else if (error.message === 'Network Error') {
+        errorMessage = "Cannot connect to the backend server. Please ensure it's running.";
       }
       
       setNotification({
@@ -412,19 +421,24 @@ const VideoPage = () => {
           severity: 'info'
         });
       } else {
-        // If the video is liked, unlike it first
         if (isLiked) {
           await VideoService.unlikeVideo(videoId);
           setIsLiked(false);
         }
         
         const videoData = {
-          videoId,
+          videoId: videoId,
           title: video?.snippet?.title || '',
           description: video?.snippet?.description || '',
           thumbnailUrl: video?.snippet?.thumbnails?.high?.url || '',
           channelTitle: video?.snippet?.channelTitle || ''
         };
+        
+        console.log("Disliking video with data:", JSON.stringify({
+          videoId: videoData.videoId,
+          title: videoData.title.substring(0, 30) + '...'
+        }));
+        
         await VideoService.dislikeVideo(videoData);
         setIsDisliked(true);
         setNotification({
@@ -440,9 +454,13 @@ const VideoPage = () => {
       if (error.response) {
         if (error.response.status === 404) {
           errorMessage = "The dislike service is unavailable. Please try again later.";
+        } else if (error.response.status === 0 || error.response.status === 'cors') {
+          errorMessage = "CORS error: The backend server is not accessible. Please check that it's running and properly configured.";  
         } else if (error.response.data && error.response.data.message) {
           errorMessage = error.response.data.message;
         }
+      } else if (error.message === 'Network Error') {
+        errorMessage = "Cannot connect to the backend server. Please ensure it's running.";
       }
       
       setNotification({

@@ -1,8 +1,20 @@
 import axios from 'axios';
 import authHeader from './auth-header';
 
+// Debug logging
+const DEBUG = true;
+const logSubscription = (...args) => DEBUG && console.log('%c[SUBSCRIPTION]', 'background: #8bc34a; color: #000', ...args);
+
 const API_URL = 'http://localhost:8080/api/youtube-subscriptions/';
-const YOUTUBE_API_KEY = process.env.REACT_APP_YOUTUBE_API_KEY || 'YOUR_YOUTUBE_API_KEY'; // Get from environment variables
+
+// Lấy API key từ biến môi trường
+const YOUTUBE_API_KEY =  'AIzaSyBXoEAacf5by-sCmAodjwWFqOcUv247Ies';
+// process.env.REACT_APP_YOUTUBE_API_KEY ||
+// Log API key status
+logSubscription(`YouTube API Key ${YOUTUBE_API_KEY ? 'đã được cấu hình' : 'CHƯA ĐƯỢC CẤU HÌNH'}`);
+if (!YOUTUBE_API_KEY) {
+  console.error('❌ YOUTUBE_API_KEY chưa được cấu hình trong .env! API calls sẽ thất bại.');
+}
 
 // Helper function to get subscriptions from localStorage
 const getLocalSubscriptions = () => {
@@ -33,6 +45,13 @@ const getChannelData = (channelId, channelName) => {
 
 // Fetch accurate subscriber count from YouTube API
 const fetchYouTubeChannelInfo = async (channelId) => {
+  if (!YOUTUBE_API_KEY || YOUTUBE_API_KEY === 'YOUR_YOUTUBE_API_KEY_HERE') {
+    logSubscription(`❌ Bỏ qua API call cho channel ID ${channelId} do thiếu API key hợp lệ`);
+    return null;
+  }
+
+  logSubscription(`Đang lấy thông tin kênh YouTube: ${channelId}`);
+  
   try {
     const response = await axios.get(`https://www.googleapis.com/youtube/v3/channels`, {
       params: {
@@ -51,6 +70,8 @@ const fetchYouTubeChannelInfo = async (channelId) => {
         thumbnailUrl: channel.snippet.thumbnails.default.url
       };
       
+      logSubscription(`✅ Nhận được dữ liệu kênh: ${channelData.name}, ${channelData.subscriberCount} subscribers`);
+      
       // Update cached data
       const channels = JSON.parse(localStorage.getItem('channels') || '{}');
       channels[channelId] = channelData;
@@ -58,9 +79,11 @@ const fetchYouTubeChannelInfo = async (channelId) => {
       
       return channelData;
     }
+    
+    logSubscription(`⚠️ Không tìm thấy thông tin cho kênh: ${channelId}`);
     return null;
   } catch (error) {
-    console.error('Error fetching YouTube channel data:', error);
+    logSubscription(`❌ Lỗi khi lấy thông tin YouTube: ${error.message}`, error.response?.data);
     return null;
   }
 };

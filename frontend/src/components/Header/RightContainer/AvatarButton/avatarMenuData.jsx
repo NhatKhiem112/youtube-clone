@@ -1,3 +1,4 @@
+import React from 'react';
 import AccountBoxOutlinedIcon from '@material-ui/icons/AccountBoxOutlined'
 import MonetizationOnOutlinedIcon from '@material-ui/icons/MonetizationOnOutlined'
 import SettingsOutlinedIcon from '@material-ui/icons/SettingsOutlined'
@@ -14,6 +15,11 @@ import PersonAddOutlinedIcon from '@material-ui/icons/PersonAddOutlined'
 import PersonOutlineIcon from '@material-ui/icons/PersonOutline'
 import VideoLibraryIcon from '@material-ui/icons/VideoLibrary'
 import CloudUploadIcon from '@material-ui/icons/CloudUpload'
+import AuthService from '../../../../services/auth.service'
+
+// Debug logging
+const DEBUG = true;
+const logMenuData = (...args) => DEBUG && console.log('%c[AVATAR-MENU-DATA]', 'background: #ff9800; color: #fff', ...args);
 
 // Define menu items for authenticated users
 export const getAuthenticatedMenuArray = (logoutHandler) => [
@@ -111,3 +117,115 @@ export const getUnauthenticatedMenuArray = () => [
 
 // For backward compatibility
 export const menuArray = getAuthenticatedMenuArray();
+
+const handleLogout = ({ history, logout }) => {
+  logMenuData('Đăng xuất được kích hoạt từ menu avatar');
+  
+  try {
+    // Sử dụng cả AuthService và logout từ context để đảm bảo đăng xuất hoàn toàn
+    const authService = new AuthService();
+    
+    // Trước khi đăng xuất, xóa dữ liệu người dùng ngay lập tức
+    localStorage.removeItem('user');
+    logMenuData('Đã xóa user từ localStorage trước khi đăng xuất');
+    
+    // Gọi hàm đăng xuất từ context nếu có
+    if (typeof logout === 'function') {
+      logMenuData('Gọi hàm logout từ context');
+      logout();
+    } else {
+      logMenuData('Hàm logout từ context không khả dụng');
+    }
+    
+    // Gọi thêm hàm đăng xuất từ service
+    logMenuData('Gọi hàm logout từ AuthService');
+    authService.logout();
+    
+    // Đăng xuất khẩn cấp nếu vẫn có dữ liệu người dùng
+    if (localStorage.getItem('user')) {
+      logMenuData('CẢNH BÁO: Vẫn còn user sau khi đăng xuất, xóa khẩn cấp và làm mới trang');
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Làm mới trang để đảm bảo trạng thái ứng dụng được cập nhật
+      setTimeout(() => {
+        window.location.reload(true);
+      }, 100);
+    } else {
+      logMenuData('Đăng xuất thành công, chuyển hướng đến trang chủ');
+      history.push('/');
+    }
+  } catch (error) {
+    logMenuData('❌ Lỗi khi đăng xuất:', error);
+    
+    // Xử lý lỗi bằng cách đăng xuất khẩn cấp
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.href = '/';
+  }
+};
+
+const avatarMenuData = [
+  // Các mục menu chỉ hiển thị khi đã đăng nhập
+  {
+    id: 'profile',
+    title: 'Hồ sơ của tôi',
+    path: '/profile',
+    icon: <PersonOutlineIcon />,
+    requiresAuth: true,
+    divider: false,
+  },
+  {
+    id: 'videos',
+    title: 'Video của tôi',
+    path: '/my-videos',
+    icon: <VideoLibraryIcon />,
+    requiresAuth: true,
+    divider: true,
+  },
+  {
+    id: 'logout',
+    title: 'Đăng xuất',
+    icon: <ExitToAppOutlinedIcon />,
+    onClick: handleLogout,
+    requiresAuth: true,
+    divider: true,
+  },
+  
+  // Các mục menu chỉ hiển thị khi chưa đăng nhập
+  {
+    id: 'login',
+    title: 'Đăng nhập',
+    path: '/login',
+    icon: <ExitToAppOutlinedIcon />,
+    noAuth: true,
+    divider: true,
+  },
+  
+  // Các mục menu luôn hiển thị
+  {
+    id: 'settings',
+    title: 'Cài đặt',
+    path: '/settings',
+    icon: <SettingsOutlinedIcon />,
+    divider: false,
+  },
+  {
+    id: 'help',
+    title: 'Trợ giúp',
+    path: '/help',
+    icon: <HelpOutlineOutlinedIcon />,
+    divider: false,
+  },
+  {
+    id: 'feedback',
+    title: 'Gửi phản hồi',
+    path: '/feedback',
+    icon: <FeedbackOutlinedIcon />,
+    divider: false,
+  },
+];
+
+logMenuData(`Đã tải ${avatarMenuData.length} mục menu avatar`);
+
+export default avatarMenuData;

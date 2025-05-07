@@ -553,7 +553,7 @@ const MyVideos = () => {
                   <StyledCardMedia
                     component="img"
                     alt={video.title}
-                    image={video.thumbnailUrl ? `http://localhost:8080${video.thumbnailUrl}` : 'https://via.placeholder.com/320x180?text=No+Thumbnail'}
+                    image={video.thumbnailUrl || 'https://via.placeholder.com/320x180?text=No+Thumbnail'}
                     title={video.title}
                     onClick={() => handleWatchClick(video)}
                   />

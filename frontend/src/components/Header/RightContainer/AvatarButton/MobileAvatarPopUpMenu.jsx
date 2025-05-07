@@ -25,13 +25,13 @@ const MobileAvatarPopUpMenu = ({ anchorAvatarButton, handleAvatarMenuClose, isLo
             <AvatarMenuTop onClick={handleAvatarMenuClose} />
             <Divider />
             <AvatarMenuMiddle onClick={handleAvatarMenuClose} />
-            <Divider />
+      <Divider />
             <AvatarMenuBottom onClick={handleAvatarMenuClose} />
           </>
         ) : (
           <>
             <AvatarMenuTop onClick={handleAvatarMenuClose} isUnauthenticated={true} />
-            <Divider />
+      <Divider />
             <AvatarMenuBottom onClick={handleAvatarMenuClose} />
           </>
         )}
