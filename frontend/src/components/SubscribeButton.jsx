@@ -66,7 +66,7 @@ const SubscribeButton = ({ channelId, channelUsername, channelThumbnailUrl, subs
   const [notificationLevel, setNotificationLevel] = useState("ALL"); // ALL, PERSONALIZED, NONE
   const [anchorEl, setAnchorEl] = useState(null);
   const buttonRef = useRef(null);
-
+  
   useEffect(() => {
     const checkSubscriptionStatus = async () => {
       const currentUser = AuthService.getCurrentUser();
@@ -92,7 +92,7 @@ const SubscribeButton = ({ channelId, channelUsername, channelThumbnailUrl, subs
 
     checkSubscriptionStatus();
   }, [channelId]);
-
+  
   const handleButtonClick = (event) => {
     if (isSubscribed) {
       setAnchorEl(event.currentTarget);
@@ -104,7 +104,7 @@ const SubscribeButton = ({ channelId, channelUsername, channelThumbnailUrl, subs
   const handleCloseMenu = () => {
     setAnchorEl(null);
   };
-
+  
   const handleSubscribe = async () => {
     const currentUser = AuthService.getCurrentUser();
     if (!currentUser) {
@@ -112,7 +112,7 @@ const SubscribeButton = ({ channelId, channelUsername, channelThumbnailUrl, subs
       window.location.href = '/login';
       return;
     }
-
+    
     setLoading(true);
     try {
       if (isSubscribed) {
@@ -193,7 +193,7 @@ const SubscribeButton = ({ channelId, channelUsername, channelThumbnailUrl, subs
       return 'Đã đăng ký';
     }
   };
-
+  
   return (
     <>
       <Button

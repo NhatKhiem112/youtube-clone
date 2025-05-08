@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
-import App from './App'
+import App from './App.js'
 import { createGlobalStyle } from 'styled-components/macro'
 import { BrowserRouter } from 'react-router-dom'
 import axios from 'axios'

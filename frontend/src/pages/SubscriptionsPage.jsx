@@ -18,6 +18,7 @@ import NotificationsActiveIcon from '@material-ui/icons/NotificationsActive';
 import NotificationsOffIcon from '@material-ui/icons/NotificationsOff';
 import SubscriptionsIcon from '@material-ui/icons/Subscriptions';
 import YouTubeIcon from '@material-ui/icons/YouTube';
+import axios from 'axios';
 
 const useStyles = makeStyles((theme) => ({
   container: {
@@ -208,6 +209,10 @@ const useStyles = makeStyles((theme) => ({
   }
 }));
 
+// Lấy API key từ biến môi trường hoặc sử dụng giá trị cứng
+const YOUTUBE_API_KEY = 'AIzaSyBXoEAacf5by-sCmAodjwWFqOcUv247Ies';
+// process.env.REACT_APP_YOUTUBE_API_KEY || 
+
 const SubscriptionsPage = () => {
   const [loading, setLoading] = useState(true);
   const [subscriptions, setSubscriptions] = useState([]);
@@ -228,13 +233,109 @@ const SubscriptionsPage = () => {
     loadSubscriptions();
   }, []);
 
+  // Phương thức lấy thông tin kênh từ YouTube API
+  const fetchChannelDetails = async (channelId) => {
+    try {
+      console.log(`Fetching details for channel: ${channelId}`);
+      
+      if (!YOUTUBE_API_KEY) {
+        console.error('Missing YouTube API key');
+        return null;
+      }
+      
+      const response = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+        params: {
+          part: 'snippet,statistics',
+          id: channelId,
+          key: YOUTUBE_API_KEY
+        }
+      });
+      
+      if (response.data.items && response.data.items.length > 0) {
+        const channelData = response.data.items[0];
+        console.log('Channel data from YouTube API:', channelData);
+        
+        return {
+          id: channelId,
+          username: channelData.snippet.title,
+          profileImageUrl: channelData.snippet.thumbnails.default.url,
+          subscriberCount: parseInt(channelData.statistics.subscriberCount || '0'),
+          notificationEnabled: true, // Giữ nguyên giá trị hiện tại
+        };
+      }
+      
+      console.log(`No data found for channel: ${channelId}`);
+      return null;
+    } catch (error) {
+      console.error(`Error fetching channel details for ${channelId}:`, error);
+      return null;
+    }
+  };
+
   const loadSubscriptions = async () => {
     try {
       setLoading(true);
+      console.log('Fetching subscriptions...');
       const response = await subscriptionService.getMySubscriptions();
-      setSubscriptions(response.data || []);
+      console.log('Subscriptions response:', response);
+      
+      if (response.data && Array.isArray(response.data)) {
+        console.log('Subscription data details:', response.data.map(sub => ({
+          id: sub.id,
+          username: sub.username,
+          hasImage: !!sub.profileImageUrl,
+          hasCount: !!sub.subscriberCount
+        })));
+        
+        // Xác định các kênh cần lấy thêm thông tin từ YouTube API
+        const channelsNeedingDetails = response.data.filter(
+          sub => !sub.profileImageUrl || !sub.subscriberCount || sub.subscriberCount === 0
+        );
+        
+        console.log(`${channelsNeedingDetails.length} channels need additional details`);
+        
+        // Tạo bản sao của danh sách đăng ký để cập nhật
+        let enhancedSubscriptions = [...response.data];
+        
+        // Lấy thông tin bổ sung cho các kênh cần thiết
+        if (channelsNeedingDetails.length > 0) {
+          for (const channel of channelsNeedingDetails) {
+            const youtubeData = await fetchChannelDetails(channel.id);
+            
+            if (youtubeData) {
+              // Cập nhật thông tin kênh trong danh sách
+              enhancedSubscriptions = enhancedSubscriptions.map(sub => {
+                if (sub.id === youtubeData.id) {
+                  return {
+                    ...sub,
+                    username: youtubeData.username || sub.username || 'YouTube Channel',
+                    profileImageUrl: youtubeData.profileImageUrl || sub.profileImageUrl,
+                    subscriberCount: youtubeData.subscriberCount || sub.subscriberCount || 0
+                  };
+                }
+                return sub;
+              });
+            }
+          }
+        }
+        
+        // Đảm bảo tất cả các kênh đều có đủ thông tin
+        enhancedSubscriptions = enhancedSubscriptions.map(sub => ({
+          ...sub,
+          username: sub.username || sub.channelName || 'YouTube Channel',
+          profileImageUrl: sub.profileImageUrl || sub.channelThumbnailUrl || 'https://yt3.ggpht.com/ytc/AMLnZu-fB-c8OJZ5X0t9wGT-RQOQ8v2TdApKJnYFUA=s176-c-k-c0x00ffffff-no-rj',
+          subscriberCount: typeof sub.subscriberCount === 'number' ? sub.subscriberCount : 0
+        }));
+        
+        console.log('Enhanced subscriptions:', enhancedSubscriptions);
+        setSubscriptions(enhancedSubscriptions);
+      } else {
+        console.error('Invalid subscription data format:', response);
+        setSubscriptions([]);
+      }
     } catch (error) {
       console.error('Error loading subscriptions:', error);
+      setSubscriptions([]);
     } finally {
       setLoading(false);
     }

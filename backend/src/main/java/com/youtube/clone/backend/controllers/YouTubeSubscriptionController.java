@@ -137,11 +137,26 @@ public class YouTubeSubscriptionController {
         List<Map<String, Object>> channels = subscriptions.stream().map(subscription -> {
             Map<String, Object> channelData = new HashMap<>();
             channelData.put("id", subscription.getYoutubeChannelId());
-            channelData.put("username", subscription.getChannelName());
-            channelData.put("profileImageUrl", subscription.getChannelThumbnailUrl());
-            channelData.put("subscriberCount", subscription.getSubscriberCount());
+            
+            // Đảm bảo các trường đều có dữ liệu
+            channelData.put("username", subscription.getChannelName() != null ? 
+                            subscription.getChannelName() : "YouTube Channel");
+            
+            // Thêm dữ liệu hình ảnh với fallback
+            channelData.put("profileImageUrl", subscription.getChannelThumbnailUrl() != null ? 
+                           subscription.getChannelThumbnailUrl() : 
+                           "https://yt3.ggpht.com/ytc/AMLnZu-fB-c8OJZ5X0t9wGT-RQOQ8v2TdApKJnYFUA=s176-c-k-c0x00ffffff-no-rj");
+            
+            // Thêm đủ các trường khác
+            channelData.put("subscriberCount", subscription.getSubscriberCount() != null ? 
+                           subscription.getSubscriberCount() : 0);
             channelData.put("notificationEnabled", subscription.isNotificationEnabled());
             channelData.put("subscribedAt", subscription.getSubscribedAt());
+            
+            // Thêm các trường tương thích với frontend
+            channelData.put("channelName", subscription.getChannelName());
+            channelData.put("channelThumbnailUrl", subscription.getChannelThumbnailUrl());
+            
             return channelData;
         }).collect(Collectors.toList());
         
@@ -172,11 +187,85 @@ public class YouTubeSubscriptionController {
         return ResponseEntity.ok(response);
     }
 
+    // Alternative unsubscribe endpoint using PUT for better transaction management
+    @PutMapping("/unsubscribe-alt/{youtubeChannelId}")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<?> unsubscribeFromYoutubeChannelAlt(@PathVariable String youtubeChannelId) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String currentUsername = authentication.getName();
+        
+        User user = userRepository.findByUsername(currentUsername)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        
+        // Check if not subscribed
+        if (!youtubeSubscriptionRepository.existsByUserAndYoutubeChannelId(user, youtubeChannelId)) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Not subscribed to this channel"));
+        }
+        
+        try {
+            // Delete subscription within transaction
+            youtubeSubscriptionRepository.deleteByUserAndYoutubeChannelId(user, youtubeChannelId);
+            return ResponseEntity.ok(new MessageResponse("Unsubscribed successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new MessageResponse("Failed to unsubscribe: " + e.getMessage()));
+        }
+    }
+    
+    // Post variant of unsubscribe as alternative for clients with DELETE issues
+    @PostMapping("/unsubscribe-alt/{youtubeChannelId}")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<?> unsubscribeFromYoutubeChannelPost(@PathVariable String youtubeChannelId) {
+        return unsubscribeFromYoutubeChannelAlt(youtubeChannelId);
+    }
+
     // Simple test endpoint to verify controller is working
     @GetMapping("/test")
     public ResponseEntity<?> testEndpoint() {
         Map<String, String> response = new HashMap<>();
         response.put("message", "YouTube Subscription controller is working!");
         return ResponseEntity.ok(response);
+    }
+    
+    // Update channel information from YouTube API
+    @PutMapping("/update-channel-info/{youtubeChannelId}")
+    @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')")
+    public ResponseEntity<?> updateChannelInfo(
+            @PathVariable String youtubeChannelId,
+            @RequestBody YouTubeChannelRequest channelData) {
+        try {
+            // Tìm subscription hiện tại
+            List<YouTubeSubscription> subscriptions = 
+                youtubeSubscriptionRepository.findByYoutubeChannelId(youtubeChannelId);
+            
+            if (subscriptions.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("No subscriptions found for channel ID: " + youtubeChannelId));
+            }
+            
+            // Cập nhật thông tin cho tất cả các subscription có cùng channelId
+            for (YouTubeSubscription subscription : subscriptions) {
+                // Cập nhật thông tin từ YouTube API
+                if (channelData.getChannelName() != null) {
+                    subscription.setChannelName(channelData.getChannelName());
+                }
+                
+                if (channelData.getChannelThumbnailUrl() != null) {
+                    subscription.setChannelThumbnailUrl(channelData.getChannelThumbnailUrl());
+                }
+                
+                if (channelData.getSubscriberCount() != null) {
+                    subscription.setSubscriberCount(channelData.getSubscriberCount());
+                }
+                
+                // Lưu thay đổi
+                youtubeSubscriptionRepository.save(subscription);
+            }
+            
+            return ResponseEntity.ok(new MessageResponse("Channel information updated successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new MessageResponse("Failed to update channel info: " + e.getMessage()));
+        }
     }
 } 

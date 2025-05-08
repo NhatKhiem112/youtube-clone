@@ -73,6 +73,11 @@ public class WebSecurityConfig {
                         .requestMatchers("/test/**").permitAll() // No /api prefix because of context-path
                         .requestMatchers("/youtube-subscriptions/test").permitAll() // Allow test endpoint
                         .requestMatchers("/error").permitAll()
+                        // Public video endpoints
+                        .requestMatchers("/videos").permitAll() // Allow public video listing
+                        .requestMatchers("/videos/{id}").permitAll() // Allow video detail access
+                        .requestMatchers("/videos/stream/**").permitAll() // Allow direct video streaming
+                        .requestMatchers("/videos/thumbnail/**").permitAll() // Allow thumbnail access
                         // Debug mode - TEMPORARY - REMOVE IN PRODUCTION
                         .requestMatchers("/videos/history/**").permitAll() // For debugging the watch history API
                         .requestMatchers("/videos/liked/**").permitAll() // For debugging the liked videos API

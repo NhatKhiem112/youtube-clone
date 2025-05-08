@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Direct Video Player</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #0f0f0f;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            align-items: center;
+            justify-content: center;
+        }
+        .video-wrapper {
+            width: 80%;
+            height: 70%;
+            background-color: black;
+            position: relative;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background-color: black;
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            color: white;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-download {
+            background-color: #4285f4;
+        }
+        .btn-back {
+            background-color: #cc0000;
+        }
+        .error-message {
+            color: white;
+            background-color: rgba(255,0,0,0.2);
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            max-width: 80%;
+            text-align: center;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="video-wrapper">
+            <div class="loading">Loading video...</div>
+            <video id="videoPlayer" controls autoplay></video>
+        </div>
+        <div class="controls">
+            <a id="downloadBtn" href="#" class="btn btn-download" download>Download Video</a>
+            <button onclick="window.close()" class="btn btn-back">Close Player</button>
+        </div>
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get the video URL from the query parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const videoSrc = urlParams.get('src');
+            
+            if (!videoSrc) {
+                showError('No video source provided. Please use ?src=URL in the page URL.');
+                return;
+            }
+            
+            const videoPlayer = document.getElementById('videoPlayer');
+            const downloadBtn = document.getElementById('downloadBtn');
+            
+            // Set video source
+            videoPlayer.src = videoSrc;
+            
+            // Set download link
+            downloadBtn.href = videoSrc;
+            
+            // Extract filename from URL
+            const urlParts = videoSrc.split('/');
+            const filename = urlParts[urlParts.length - 1];
+            downloadBtn.setAttribute('download', filename);
+            
+            // Handle video loading error
+            videoPlayer.onerror = function() {
+                showError(`Failed to load video from: ${videoSrc}. Please try the download link instead.`);
+            };
+            
+            // Remove loading indicator when video can play
+            videoPlayer.oncanplay = function() {
+                document.querySelector('.loading').style.display = 'none';
+            };
+            
+            // Update page title with filename
+            document.title = `Playing: ${filename}`;
+        });
+        
+        function showError(message) {
+            const errorElement = document.getElementById('errorMessage');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+            document.querySelector('.loading').style.display = 'none';
+        }
+    </script>
+</body>
+</html> 

@@ -19,6 +19,8 @@ import WatchHistoryPage from '../../pages/WatchHistoryPage'
 import ReportsPage from '../../pages/ReportsPage'
 import AdminReportsPage from '../../pages/AdminReportsPage'
 import SubscriptionsPage from '../../pages/SubscriptionsPage'
+import UserProfilePage from '../../pages/UserProfilePage'
+import ChannelPage from '../../pages/ChannelPage'
 import ScrollToTop from '../ScrollToTop'
 
 const Main = () => {
@@ -35,6 +37,9 @@ const Main = () => {
       {!isInVideoPage && <SidebarToShow />}
       <MainContentWrapper>
         <Switch>
+          <Route path='/user/:userId'>
+            <UserProfilePage />
+          </Route>
           <Route path='/' exact>
             <ChipsBar
               {...{
@@ -75,6 +80,9 @@ const Main = () => {
           </Route>
           <Route path='/subscriptions'>
             <SubscriptionsPage />
+          </Route>
+          <Route path='/channel/:channelId'>
+            <ChannelPage />
           </Route>
           <Route path='/reports'>
             <ReportsPage />

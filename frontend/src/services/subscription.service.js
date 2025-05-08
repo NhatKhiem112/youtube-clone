@@ -5,10 +5,11 @@ import authHeader from './auth-header';
 const DEBUG = true;
 const logSubscription = (...args) => DEBUG && console.log('%c[SUBSCRIPTION]', 'background: #8bc34a; color: #000', ...args);
 
-const API_URL = 'http://localhost:8080/api/youtube-subscriptions/';
+const API_URL = 'http://localhost:8080/api';
+const SUBSCRIPTIONS_URL = `${API_URL}/youtube-subscriptions`;
 
 // Lấy API key từ biến môi trường
-const YOUTUBE_API_KEY =  'AIzaSyBXoEAacf5by-sCmAodjwWFqOcUv247Ies';
+const YOUTUBE_API_KEY = 'AIzaSyBXoEAacf5by-sCmAodjwWFqOcUv247Ies';
 // process.env.REACT_APP_YOUTUBE_API_KEY ||
 // Log API key status
 logSubscription(`YouTube API Key ${YOUTUBE_API_KEY ? 'đã được cấu hình' : 'CHƯA ĐƯỢC CẤU HÌNH'}`);
@@ -102,337 +103,323 @@ const updateChannelSubscriberCount = (channelId, increment) => {
 };
 
 class SubscriptionService {
-  // Subscribe to a channel
-  async subscribeToChannel(channelId, channelName, channelData = null) {
+  // Get all subscriptions for current user
+  async getSubscriptions() {
     try {
-      // Try to get accurate data from YouTube API
-      let updatedChannelData = await fetchYouTubeChannelInfo(channelId);
-      
-      // Create default channel data if YouTube API failed
-      const channelDataToSend = updatedChannelData || channelData || {
-        channelName: channelName || `Channel ${channelId}`,
-        channelThumbnailUrl: 'https://via.placeholder.com/150',
-        subscriberCount: 0
-      };
-      
-      // First try to call the backend API
-      return axios.post(API_URL + `subscribe/${channelId}`, channelDataToSend, { headers: authHeader() })
-        .catch(error => {
-          console.warn('Backend API unavailable, using localStorage instead:', error.message);
-          
-          // If backend API fails, use localStorage as fallback
-          const currentUser = JSON.parse(localStorage.getItem('user'));
-          
-          if (!currentUser) {
-            throw new Error('User not logged in');
-          }
-          
-          const subscriptions = getLocalSubscriptions();
-          
-          // Check if already subscribed
-          const alreadySubscribed = subscriptions.some(
-            sub => sub.channelId === channelId && sub.userId === currentUser.id
-          );
-          
-          if (alreadySubscribed) {
-            throw new Error('Already subscribed to this channel');
-          }
-          
-          // Add subscription
-          const newSubscription = {
-            id: Date.now(), // Generate a unique ID
-            userId: currentUser.id,
-            channelId: channelId,
-            channelName: channelDataToSend.channelName || channelName,
-            subscribedAt: new Date().toISOString(),
-            notificationEnabled: true
-          };
-          
-          subscriptions.push(newSubscription);
-          saveLocalSubscriptions(subscriptions);
-          
-          // Update channel subscriber count
-          updateChannelSubscriberCount(channelId, true);
-          
-          return Promise.resolve({ data: { message: 'Subscribed successfully' } });
-        });
+      const response = await axios.get(`${SUBSCRIPTIONS_URL}/my-youtube-subscriptions`, { headers: authHeader() });
+      return response.data;
     } catch (error) {
-      return Promise.reject(error);
+      console.error('Error fetching subscriptions:', error);
+      return [];
+    }
+  }
+  
+  // Get my subscriptions - needed by SubscriptionsPage
+  async getMySubscriptions() {
+    try {
+      logSubscription('Fetching my YouTube subscriptions');
+      const response = await axios.get(`${SUBSCRIPTIONS_URL}/my-youtube-subscriptions`, { headers: authHeader() });
+      
+      // Kiểm tra và log dữ liệu đã nhận
+      logSubscription(`Received ${response.data.length} subscriptions from server`);
+      
+      // Danh sách kênh cần cập nhật từ YouTube API
+      const channelsNeedingUpdate = response.data.filter(
+        sub => !sub.profileImageUrl || !sub.subscriberCount || sub.subscriberCount === 0
+      );
+      
+      logSubscription(`Found ${channelsNeedingUpdate.length} channels needing data update`);
+      
+      // Lưu trữ các promise để đợi tất cả các yêu cầu hoàn thành
+      const channelUpdatePromises = [];
+      
+      // Tăng cường dữ liệu kênh bằng cách truy vấn API YouTube
+      for (const channel of channelsNeedingUpdate) {
+        // Chỉ thực hiện API call khi có channelId hợp lệ
+        if (channel.id) {
+          const updatePromise = this._enhanceChannelWithYouTubeData(channel);
+          channelUpdatePromises.push(updatePromise);
+        }
+      }
+      
+      // Đợi tất cả các yêu cầu hoàn thành
+      await Promise.allSettled(channelUpdatePromises);
+      
+      // Đảm bảo mỗi kênh có đầy đủ thông tin
+      const enhancedSubscriptions = response.data.map(subscription => {
+        // Kiểm tra các trường quan trọng
+        if (!subscription.profileImageUrl || !subscription.username) {
+          logSubscription(`Missing data for channel ${subscription.id}`);
+        }
+        
+        // Đảm bảo có tên hiển thị
+        if (!subscription.username && subscription.channelName) {
+          subscription.username = subscription.channelName;
+        }
+        
+        // Đảm bảo có URL hình ảnh
+        if (!subscription.profileImageUrl && subscription.channelThumbnailUrl) {
+          subscription.profileImageUrl = subscription.channelThumbnailUrl;
+        }
+        
+        // Đảm bảo có số người đăng ký
+        if (subscription.subscriberCount === undefined || subscription.subscriberCount === null) {
+          subscription.subscriberCount = 0;
+        }
+        
+        return subscription;
+      });
+      
+      logSubscription('Enhanced subscription data is ready');
+      return { data: enhancedSubscriptions };
+    } catch (error) {
+      console.error('Error fetching my subscriptions:', error);
+      return { data: [] };
+    }
+  }
+  
+  // Helper method to enhance channel data with YouTube API
+  async _enhanceChannelWithYouTubeData(channel) {
+    try {
+      logSubscription(`Enhancing channel data for: ${channel.id}`);
+      
+      if (!YOUTUBE_API_KEY || YOUTUBE_API_KEY === 'YOUR_YOUTUBE_API_KEY_HERE') {
+        logSubscription(`Cannot enhance channel ${channel.id} - missing valid API key`);
+        return channel;
+      }
+      
+      // Lấy thông tin kênh từ API YouTube
+      const response = await axios.get(`https://www.googleapis.com/youtube/v3/channels`, {
+        params: {
+          part: 'snippet,statistics',
+          id: channel.id,
+          key: YOUTUBE_API_KEY
+        }
+      });
+      
+      // Kiểm tra dữ liệu trả về
+      if (response.data && response.data.items && response.data.items.length > 0) {
+        const youtubeData = response.data.items[0];
+        
+        // Cập nhật thông tin kênh
+        if (youtubeData.snippet) {
+          channel.username = youtubeData.snippet.title;
+          channel.profileImageUrl = youtubeData.snippet.thumbnails.default.url;
+        }
+        
+        // Cập nhật số người đăng ký
+        if (youtubeData.statistics) {
+          channel.subscriberCount = parseInt(youtubeData.statistics.subscriberCount);
+        }
+        
+        logSubscription(`Successfully enhanced channel: ${channel.username} with ${channel.subscriberCount} subscribers`);
+        
+        // Cập nhật thông tin kênh vào backend
+        this._updateChannelInfoOnBackend(channel);
+      } else {
+        logSubscription(`No data found for channel: ${channel.id}`);
+      }
+      
+      return channel;
+    } catch (error) {
+      console.error(`Error enhancing channel ${channel.id}:`, error);
+      return channel;
+    }
+  }
+  
+  // Helper method to update channel info on backend
+  async _updateChannelInfoOnBackend(channel) {
+    try {
+      logSubscription(`Updating channel data on backend for: ${channel.id}`);
+      
+      // Gửi thông tin cập nhật lên backend
+      await axios.put(`${SUBSCRIPTIONS_URL}/update-channel-info/${channel.id}`, {
+        channelName: channel.username,
+        channelThumbnailUrl: channel.profileImageUrl,
+        subscriberCount: channel.subscriberCount
+      }, { headers: authHeader() });
+      
+      logSubscription(`Successfully updated channel info on backend: ${channel.id}`);
+    } catch (error) {
+      console.error(`Error updating channel info on backend for ${channel.id}:`, error);
+    }
+  }
+
+  // Subscribe to a channel
+  async subscribe(channelData) {
+    try {
+      const response = await axios.post(`${SUBSCRIPTIONS_URL}/subscribe/${channelData.channelId}`, {
+        channelName: channelData.channelTitle,
+        channelThumbnailUrl: channelData.thumbnailUrl || '',
+        subscriberCount: channelData.subscriberCount || 0
+      }, { headers: authHeader() });
+      return response.data;
+    } catch (error) {
+      console.error('Error subscribing to channel:', error);
+      throw error;
+    }
+  }
+  
+  // New method for subscribing to channel with additional data
+  async subscribeToChannel(channelId, channelUsername, channelData) {
+    logSubscription(`Subscribing to channel: ${channelId}, ${channelUsername}`);
+    try {
+      const response = await axios.post(`${SUBSCRIPTIONS_URL}/subscribe/${channelId}`, {
+        channelName: channelUsername,
+        channelThumbnailUrl: channelData.channelThumbnailUrl || '',
+        subscriberCount: channelData.subscriberCount || 0
+      }, { headers: authHeader() });
+      return response.data;
+    } catch (error) {
+      console.error('Error subscribing to channel:', error);
+      throw error;
     }
   }
 
   // Unsubscribe from a channel
-  unsubscribeFromChannel(channelId) {
+  async unsubscribe(channelId) {
     try {
-      // First try to call the backend API
-      return axios.delete(API_URL + `unsubscribe/${channelId}`, { headers: authHeader() })
-        .catch(error => {
-          console.warn('Backend API unavailable, using localStorage instead:', error.message);
-          
-          // If backend API fails, use localStorage as fallback
-          const currentUser = JSON.parse(localStorage.getItem('user'));
-          
-          if (!currentUser) {
-            throw new Error('User not logged in');
-          }
-          
+      logSubscription(`Sending unsubscribe request for channel: ${channelId}`);
+      
+      // Use RESTful POST endpoint instead of DELETE to avoid transaction issues
+      const response = await axios.post(`${SUBSCRIPTIONS_URL}/unsubscribe-alt/${channelId}`, {}, {
+        headers: authHeader()
+      });
+      
+      logSubscription(`Unsubscribe successful for channel: ${channelId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error unsubscribing from channel:', error);
+      
+      // Handle error by providing a local fallback
+      logSubscription('Using local fallback for unsubscribe');
+      this._handleLocalUnsubscribe(channelId);
+      
+      // Rethrow the error for the caller to handle UI updates
+      throw error;
+    }
+  }
+  
+  // Handle local unsubscribe as fallback when API fails
+  _handleLocalUnsubscribe(channelId) {
+    try {
+      // Get current subscriptions from localStorage
           const subscriptions = getLocalSubscriptions();
           
-          // Find and remove the subscription
-          const filteredSubscriptions = subscriptions.filter(
-            sub => !(sub.channelId === channelId && sub.userId === currentUser.id)
-          );
-          
-          if (filteredSubscriptions.length === subscriptions.length) {
-            throw new Error('Not subscribed to this channel');
-          }
-          
-          saveLocalSubscriptions(filteredSubscriptions);
-          
-          // Update channel subscriber count
-          updateChannelSubscriberCount(channelId, false);
-          
-          return Promise.resolve({ data: { message: 'Unsubscribed successfully' } });
-        });
-    } catch (error) {
-      return Promise.reject(error);
+      // Filter out the channel to unsubscribe
+      const updatedSubscriptions = subscriptions.filter(sub => sub.channelId !== channelId);
+      
+      // Save updated subscriptions
+      saveLocalSubscriptions(updatedSubscriptions);
+      
+      // Update channel data subscriber count
+      updateChannelSubscriberCount(channelId, false);
+      
+      logSubscription(`Local unsubscribe successful for channel: ${channelId}`);
+    } catch (localError) {
+      console.error('Error handling local unsubscribe:', localError);
     }
   }
 
-  // Get subscription status for a channel
+  // Method for the unsubscribe action from the subscribe button
+  async unsubscribeFromChannel(channelId) {
+    logSubscription(`Unsubscribing from channel: ${channelId}`);
+    return this.unsubscribe(channelId);
+  }
+
+  // Toggle notifications for a subscribed channel
+  async toggleNotifications(channelId) {
+    try {
+      const response = await axios.put(`${SUBSCRIPTIONS_URL}/notification/${channelId}`, {}, {
+        headers: authHeader()
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error toggling notifications:', error);
+      throw error;
+    }
+  }
+  
+  // Additional method for toggle notification from SubscribeButton
+  async toggleNotification(channelId) {
+    logSubscription(`Toggling notification for channel: ${channelId}`);
+    return this.toggleNotifications(channelId);
+  }
+
+  // Check if subscribed to a channel
+  async isSubscribed(channelId) {
+    try {
+      const response = await axios.get(`${SUBSCRIPTIONS_URL}/status/${channelId}`, {
+        headers: authHeader()
+      });
+      return response.data.subscribed;
+    } catch (error) {
+      console.error('Error checking subscription status:', error);
+      return false;
+    }
+  }
+
+  // Check if notifications are enabled for a channel
+  async hasNotificationsEnabled(channelId) {
+    try {
+      const response = await axios.get(`${SUBSCRIPTIONS_URL}/notification/${channelId}`, {
+        headers: authHeader()
+      });
+      return response.data.notificationEnabled;
+    } catch (error) {
+      console.error('Error checking notification status:', error);
+      return false;
+    }
+  }
+
+  // Get subscriber count for a channel
+  async getSubscriberCount(channelId) {
+    try {
+      const response = await axios.get(`${SUBSCRIPTIONS_URL}/count/${channelId}`);
+      return response.data.subscriberCount;
+    } catch (error) {
+      console.error('Error fetching subscriber count:', error);
+      return 0;
+    }
+  }
+
+  // Get subscription status with additional data
   async getSubscriptionStatus(channelId) {
     try {
-      // Try to get accurate data from YouTube API first
-      const youtubeData = await fetchYouTubeChannelInfo(channelId);
-      
-      // First try to call the backend API
-      return axios.get(API_URL + `status/${channelId}`, { headers: authHeader() })
-        .then(response => {
-          // If we have API data, update the response with accurate subscriber count
-          if (youtubeData && youtubeData.subscriberCount !== undefined) {
-            return {
-              ...response,
-              data: {
-                ...response.data,
-                subscriberCount: youtubeData.subscriberCount
-              }
-            };
-          }
-          return response;
-        })
-        .catch(error => {
-          console.warn('Backend API unavailable, using localStorage instead:', error.message);
-          
-          // If backend API fails, use localStorage as fallback
-          const currentUser = JSON.parse(localStorage.getItem('user'));
-          
-          if (!currentUser) {
-            return Promise.resolve({
-              data: {
-                subscribed: false,
-                subscriberCount: youtubeData ? youtubeData.subscriberCount : getChannelData(channelId).subscriberCount
-              }
-            });
-          }
-          
-          const subscriptions = getLocalSubscriptions();
-          
-          // Check if subscribed
-          const isSubscribed = subscriptions.some(
-            sub => sub.channelId === channelId && sub.userId === currentUser.id
-          );
-          
-          // Get channel data
-          const localChannelData = getChannelData(channelId);
-          
-          return Promise.resolve({
-            data: {
-              subscribed: isSubscribed,
-              subscriberCount: youtubeData ? youtubeData.subscriberCount : localChannelData.subscriberCount
-            }
-          });
-        });
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-
-  // Get all subscribed channels
-  async getMySubscriptions() {
-    try {
-      // First try to call the backend API
-      return axios.get(API_URL + 'my-youtube-subscriptions', { headers: authHeader() })
-        .then(async response => {
-          if (response && response.data) {
-            // Update each channel with accurate YouTube API data
-            const updatedSubscriptions = await Promise.all(
-              response.data.map(async subscription => {
-                const channelId = subscription.id;
-                const youtubeData = await fetchYouTubeChannelInfo(channelId);
-                
-                if (youtubeData) {
-                  return {
-                    ...subscription,
-                    username: youtubeData.name,
-                    profileImageUrl: youtubeData.thumbnailUrl || subscription.profileImageUrl,
-                    subscriberCount: youtubeData.subscriberCount
-                  };
-                }
-                return subscription;
-              })
-            );
-            
-            return { ...response, data: updatedSubscriptions };
-          }
-          return response;
-        })
-        .catch(async error => {
-          console.warn('Backend API unavailable, using localStorage instead:', error.message);
-          
-          // If backend API fails, use localStorage as fallback
-          const currentUser = JSON.parse(localStorage.getItem('user'));
-          
-          if (!currentUser) {
-            throw new Error('User not logged in');
-          }
-          
-          const subscriptions = getLocalSubscriptions();
-          
-          // Filter subscriptions by current user
-          const userSubscriptions = subscriptions.filter(sub => 
-            sub.userId === currentUser.id
-          );
-          
-          // Update each subscription with accurate YouTube data
-          const enhancedSubscriptions = await Promise.all(
-            userSubscriptions.map(async sub => {
-              const youtubeData = await fetchYouTubeChannelInfo(sub.channelId);
-              const localData = getChannelData(sub.channelId, sub.channelName);
-              
-              return {
-                id: sub.channelId,
-                username: youtubeData ? youtubeData.name : localData.name || sub.channelName,
-                profileImageUrl: youtubeData ? youtubeData.thumbnailUrl : 'https://via.placeholder.com/150',
-                subscriberCount: youtubeData ? youtubeData.subscriberCount : localData.subscriberCount,
-                notificationEnabled: sub.notificationEnabled,
-                subscribedAt: sub.subscribedAt
-              };
-            })
-          );
-          
-          return Promise.resolve({ data: enhancedSubscriptions });
-        });
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-
-  // Toggle notifications for a channel
-  toggleNotification(channelId) {
-    try {
-      // First try to call the backend API
-      return axios.put(API_URL + `notification/${channelId}`, {}, { headers: authHeader() })
-        .catch(error => {
-          console.warn('Backend API unavailable, using localStorage instead:', error.message);
-          // Fallback implementation using localStorage
-          const user = JSON.parse(localStorage.getItem('user'));
-          if (!user) {
-            throw new Error('User not authenticated');
-          }
-
-          // Get current subscriptions
-          const subscriptions = getLocalSubscriptions();
-          
-          // Find this subscription
-          const index = subscriptions.findIndex(
-            sub => sub.channelId === channelId && sub.userId === user.id
-          );
-          
-          if (index === -1) {
-            throw new Error('Not subscribed to this channel');
-          }
-          
-          // Toggle notification setting
-          subscriptions[index].notificationEnabled = !subscriptions[index].notificationEnabled;
-          
-          // Save updated subscriptions
-          localStorage.setItem('subscriptions', JSON.stringify(subscriptions));
-          
-          return Promise.resolve({
-            data: {
-              notificationEnabled: subscriptions[index].notificationEnabled
-            }
-          });
-        });
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-
-  // Get subscriptions for a specific user - for admin use
-  getUserSubscriptions(userId) {
-    const user = JSON.parse(localStorage.getItem('user'));
-    const headers = user && user.token ? { Authorization: 'Bearer ' + user.token } : {};
-    
-    // Add admin-specific header if needed
-    if (user && user.roles && (user.roles.includes('ROLE_ADMIN') || user.roles.includes('ADMIN'))) {
-      headers['x-admin-access'] = 'true';
-    }
-    
-    return axios
-      .get(`${API_URL}user/${userId}/subscriptions`, { headers })
-      .then(async response => {
-        if (response && response.data && Array.isArray(response.data)) {
-          // Enhance with YouTube data
-          const enhancedData = await Promise.all(
-            response.data.map(async sub => {
-              const youtubeData = await fetchYouTubeChannelInfo(sub.channelId);
-              if (youtubeData) {
-                return {
-                  ...sub, 
-                  channelName: youtubeData.name || sub.channelName,
-                  subscriberCount: youtubeData.subscriberCount,
-                  channelThumbnailUrl: youtubeData.thumbnailUrl || sub.channelThumbnailUrl
-                };
-              }
-              return sub;
-            })
-          );
-          return { ...response, data: enhancedData };
-        }
-        return response;
-      })
-      .catch(error => {
-        console.warn('Backend API unavailable for user subscriptions:', error.message);
-        // Try the admin endpoint as a fallback
-        return axios
-          .get(`http://localhost:8080/api/admin/users/${userId}/subscriptions`, { headers })
-          .then(async response => {
-            if (response && response.data && Array.isArray(response.data)) {
-              // Enhance with YouTube data
-              const enhancedData = await Promise.all(
-                response.data.map(async sub => {
-                  const youtubeData = await fetchYouTubeChannelInfo(sub.channelId);
-                  if (youtubeData) {
-                    return {
-                      ...sub, 
-                      channelName: youtubeData.name || sub.channelName,
-                      subscriberCount: youtubeData.subscriberCount,
-                      channelThumbnailUrl: youtubeData.thumbnailUrl || sub.channelThumbnailUrl
-                    };
-                  }
-                  return sub;
-                })
-              );
-              return { ...response, data: enhancedData };
-            }
-            return response;
-          })
-          .catch(adminError => {
-            console.warn('Admin API also unavailable:', adminError.message);
-            return Promise.resolve({ data: [] });
-          });
+      const response = await axios.get(`${SUBSCRIPTIONS_URL}/status/${channelId}`, {
+        headers: authHeader()
       });
+      return response;
+    } catch (error) {
+      console.error('Error checking subscription status:', error);
+      return { data: { subscribed: false, subscriberCount: 0 } };
+    }
+  }
+
+  // Mock implementation for testing when backend is not available
+  mockFunctions() {
+    // Check if we already connected to the real backend
+    if (this._checkedBackend) {
+      return false;
+    }
+    
+    // Try to connect to the backend
+    axios.get(`${API_URL}/health-check`)
+      .then(() => {
+        console.log('Backend is available, using real subscription service');
+        this._checkedBackend = true;
+        this._useMock = false;
+      })
+      .catch(() => {
+        console.log('Backend not available, using mock subscription service');
+        this._checkedBackend = true;
+        this._useMock = true;
+        
+        // Mock the subscriptions
+        this._mockSubscriptions = JSON.parse(localStorage.getItem('mockSubscriptions')) || [];
+      });
+    
+    return true;
   }
 }
 

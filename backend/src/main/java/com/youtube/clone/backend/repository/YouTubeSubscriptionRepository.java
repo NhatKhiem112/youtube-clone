@@ -4,6 +4,7 @@ import com.youtube.clone.backend.model.User;
 import com.youtube.clone.backend.model.YouTubeSubscription;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,5 +24,9 @@ public interface YouTubeSubscriptionRepository extends JpaRepository<YouTubeSubs
     long countByYoutubeChannelId(String youtubeChannelId);
     
     // Delete a subscription
+    @Transactional
     void deleteByUserAndYoutubeChannelId(User user, String youtubeChannelId);
+    
+    // Tìm danh sách đăng ký theo ID kênh YouTube
+    List<YouTubeSubscription> findByYoutubeChannelId(String youtubeChannelId);
 } 

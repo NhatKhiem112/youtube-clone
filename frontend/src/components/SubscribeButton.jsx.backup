@@ -1,0 +1,130 @@
+import React, { useState, useEffect } from 'react';
+import { Button, CircularProgress } from '@material-ui/core';
+import { makeStyles } from '@material-ui/core/styles';
+import AuthService from '../services/auth.service';
+import subscriptionService from '../services/subscription.service';
+
+const useStyles = makeStyles((theme) => ({
+  subscribeButton: {
+    borderRadius: '2px',
+    padding: '10px 16px',
+    fontWeight: 500,
+    fontSize: '14px',
+    textTransform: 'uppercase',
+    minWidth: '100px'
+  },
+  subscribedButton: {
+    backgroundColor: theme.palette.grey[200],
+    color: theme.palette.text.primary,
+    '&:hover': {
+      backgroundColor: theme.palette.grey[300]
+    }
+  },
+  subscribeButtonPrimary: {
+    backgroundColor: '#cc0000',
+    color: 'white',
+    '&:hover': {
+      backgroundColor: '#aa0000'
+    }
+  },
+  disabledButton: {
+    opacity: 0.7
+  },
+  buttonProgress: {
+    color: theme.palette.primary.main,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginTop: -12,
+    marginLeft: -12
+  }
+}));
+
+const SubscribeButton = ({ channelId, channelTitle, thumbnail, subscriberCount, onSubscriptionChange }) => {
+  const classes = useStyles();
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    const currentUser = AuthService.getCurrentUser();
+    if (currentUser) {
+      setIsAuthenticated(true);
+      checkSubscriptionStatus();
+    }
+  }, [channelId]);
+  
+  const checkSubscriptionStatus = async () => {
+    try {
+      setLoading(true);
+      const response = await subscriptionService.getSubscriptionStatus(channelId);
+      setIsSubscribed(response.data.subscribed);
+    } catch (error) {
+      console.error('Error checking subscription status:', error);
+      setError('Could not check subscription status');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleSubscribe = async () => {
+    if (!isAuthenticated) {
+      // Redirect to login page
+      window.location.href = '/login';
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      if (isSubscribed) {
+        await subscriptionService.unsubscribeFromChannel(channelId);
+        setIsSubscribed(false);
+        if (onSubscriptionChange) {
+          onSubscriptionChange(false);
+        }
+      } else {
+        const channelData = {
+          channelId,
+          channelTitle,
+          thumbnailUrl: thumbnail,
+          subscriberCount: subscriberCount || 0
+        };
+        
+        await subscriptionService.subscribeToChannel(channelId, channelTitle, channelData);
+        setIsSubscribed(true);
+        if (onSubscriptionChange) {
+          onSubscriptionChange(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling subscription:', error);
+      setError('Could not update subscription');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  return (
+    <Button
+      variant="contained"
+      className={`${classes.subscribeButton} ${
+        isSubscribed 
+          ? classes.subscribedButton 
+          : classes.subscribeButtonPrimary
+      }`}
+      onClick={handleSubscribe}
+      disabled={loading}
+    >
+      {loading ? (
+        <CircularProgress size={24} className={classes.buttonProgress} />
+      ) : (
+        isSubscribed ? 'SUBSCRIBED' : 'SUBSCRIBE'
+      )}
+    </Button>
+  );
+};
+
+export default SubscribeButton; 

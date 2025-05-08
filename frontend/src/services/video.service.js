@@ -99,7 +99,7 @@ class VideoService {
             } else {
                 // If just the videoId is provided, use the simpler endpoint
                 const response = await axios.post(
-                    `/api/videos/${videoId}/like`, 
+                    `${VIDEO_URL}/${videoId}/like`, 
                     {}, 
                     { headers: header }
                 );
@@ -378,7 +378,7 @@ class VideoService {
             } else {
                 // If just the videoId is provided, use the simpler endpoint
                 const response = await axios.post(
-                    `/api/videos/${videoId}/dislike`, 
+                    `${VIDEO_URL}/${videoId}/dislike`, 
                     {}, 
                     { headers: header }
                 );
@@ -759,8 +759,10 @@ class VideoService {
     // Get current user's videos
     async getUserVideos() {
         try {
-            const response = await axios.get('/api/videos/user', { headers: authHeader() });
-            return response.data;
+            const response = await axios.get(`${VIDEO_URL}/user`, { headers: authHeader() });
+            // Process all video URLs
+            const processedVideos = response.data.map(video => this._processVideoResponse(video));
+            return processedVideos;
         } catch (error) {
             console.error('Error fetching user videos:', error);
             throw error;
@@ -770,8 +772,10 @@ class VideoService {
     // Get all videos (for home page)
     async getAllVideos() {
         try {
-            const response = await axios.get('/api/videos');
-            return response.data;
+            const response = await axios.get(VIDEO_URL);
+            // Process all video URLs
+            const processedVideos = response.data.map(video => this._processVideoResponse(video));
+            return processedVideos;
         } catch (error) {
             console.error('Error fetching all videos:', error);
             throw error;
@@ -781,8 +785,27 @@ class VideoService {
     // Get video by ID
     async getVideoById(id) {
         try {
-            const response = await axios.get(`/api/videos/${id}`);
-            return response.data;
+            console.log(`Fetching video with ID ${id}`);
+            
+            // Try authenticated request first
+            try {
+                const header = this._getAuthHeader();
+                if (header) {
+                    const response = await axios.get(`${VIDEO_URL}/${id}`, { headers: header });
+                    return this._processVideoResponse(response.data);
+                }
+            } catch (authError) {
+                console.log(`Authenticated request failed: ${authError.message}`);
+                // If 401 error, continue to non-authenticated request
+                if (authError.response && authError.response.status !== 401) {
+                    throw authError;
+                }
+            }
+            
+            // Fallback to non-authenticated request
+            console.log(`Trying non-authenticated request for video ${id}`);
+            const response = await axios.get(`${VIDEO_URL}/${id}`);
+            return this._processVideoResponse(response.data);
         } catch (error) {
             console.error(`Error fetching video with ID ${id}:`, error);
             throw error;
@@ -792,13 +815,15 @@ class VideoService {
     // Upload a video
     async uploadVideo(formData) {
         try {
-            const response = await axios.post('/api/videos/upload', formData, {
+            const response = await axios.post(`${VIDEO_URL}/upload`, formData, {
                 headers: {
                     ...authHeader(),
                     'Content-Type': 'multipart/form-data'
                 }
             });
-            return response.data;
+            
+            // Process video URLs
+            return this._processVideoResponse(response.data);
         } catch (error) {
             console.error('Error uploading video:', error);
             throw error;
@@ -808,10 +833,12 @@ class VideoService {
     // Update video
     async updateVideo(id, videoData) {
         try {
-            const response = await axios.put(`/api/videos/${id}`, videoData, {
+            const response = await axios.put(`${VIDEO_URL}/${id}`, videoData, {
                 headers: authHeader()
             });
-            return response.data;
+            
+            // Process video URLs
+            return this._processVideoResponse(response.data);
         } catch (error) {
             console.error(`Error updating video with ID ${id}:`, error);
             throw error;
@@ -821,7 +848,7 @@ class VideoService {
     // Delete video
     async deleteVideo(id) {
         try {
-            const response = await axios.delete(`/api/videos/${id}`, {
+            const response = await axios.delete(`${VIDEO_URL}/${id}`, {
                 headers: authHeader()
             });
             return response.data;
@@ -834,10 +861,12 @@ class VideoService {
     // Get moderation status
     async getModerationStatus(id) {
         try {
-            const response = await axios.get(`/api/videos/${id}/moderation`, {
+            const response = await axios.get(`${VIDEO_URL}/${id}/moderation`, {
                 headers: authHeader()
             });
-            return response.data;
+            
+            // Process video URLs
+            return this._processVideoResponse(response.data);
         } catch (error) {
             console.error(`Error fetching moderation status for video ${id}:`, error);
             // Return default empty status
@@ -853,7 +882,7 @@ class VideoService {
     // Resubmit a rejected video for review
     async resubmitForReview(id) {
         try {
-            const response = await axios.post(`/api/videos/${id}/resubmit`, {}, {
+            const response = await axios.post(`${VIDEO_URL}/${id}/resubmit`, {}, {
                 headers: authHeader()
             });
             return response.data;
@@ -863,25 +892,123 @@ class VideoService {
         }
     }
 
+    // Hàm tiện ích để đảm bảo URL đúng cho các tài nguyên
+    _getFullResourceUrl(url) {
+        if (!url) return null;
+        
+        // Nếu đã là URL đầy đủ
+        if (url.startsWith('http')) {
+            return url;
+        }
+        
+        // Thêm base URL
+        return `http://localhost:8080${url}`;
+    }
+
     // Hàm tiện ích để đảm bảo URL thumbnail đúng
     _getFullThumbnailUrl(thumbnailUrl) {
         if (!thumbnailUrl) return null;
         
-        // Nếu đã là URL đầy đủ
+        // If the URL already starts with http, return it as is
         if (thumbnailUrl.startsWith('http')) {
             return thumbnailUrl;
         }
         
-        // Thêm base URL cho thumbnail
-        return `http://localhost:8080${thumbnailUrl}`;
+        // Make sure URL starts with /
+        const urlPath = thumbnailUrl.startsWith('/') ? thumbnailUrl : '/' + thumbnailUrl;
+        
+        // Use the correct backend path with /api prefix
+        return `http://localhost:8080/api${urlPath}`;
+    }
+
+    // Hàm tiện ích để đảm bảo URL video đúng
+    _getFullVideoUrl(videoUrl) {
+        if (!videoUrl) {
+            console.log('Empty video URL detected');
+            return '';
+        }
+        
+        // Log original URL for debugging
+        console.log('Processing video URL:', videoUrl);
+        
+        // If URL already starts with http, return as is
+        if (videoUrl.startsWith('http')) {
+            console.log('URL is already absolute:', videoUrl);
+            return videoUrl;
+        }
+        
+        // Extract filename from the URL regardless of path format
+        let filename = '';
+        
+        if (videoUrl.includes('/')) {
+            // Extracting filename from a path
+            const parts = videoUrl.split('/');
+            filename = parts[parts.length - 1];
+        } else {
+            // Already just a filename
+            filename = videoUrl;
+        }
+        
+        console.log('Extracted filename:', filename);
+        
+        // If this is a YouTube video ID (typically 11 characters)
+        if (/^[a-zA-Z0-9_-]{11}$/.test(filename)) {
+            console.log('Detected YouTube video ID format:', filename);
+            return `https://www.youtube.com/watch?v=${filename}`;
+        }
+        
+        // Add more logging to understand the issue with filename
+        console.log('Video ID/filename type:', typeof filename);
+        console.log('Video ID/filename value:', filename);
+        
+        // For local videos, use the direct stream endpoint which should be more reliable
+        const directUrl = `http://localhost:8080/api/videos/stream/${filename}`;
+        console.log('Using direct video URL:', directUrl);
+        
+        // List alternative URLs for troubleshooting
+        const alternativeUrls = [
+            `http://localhost:8080/videos/${filename}`,
+            `http://localhost:8080/api/videos/${filename}`,
+            `http://localhost:8080/videos/stream/${filename}`,
+            `http://localhost:8080/${filename}`
+        ];
+        
+        console.log('Alternative URLs that could be tried:', alternativeUrls);
+        
+        return directUrl;
+    }
+
+    // Hàm để xử lý đầy đủ response video với các URL chính xác
+    _processVideoResponse(video) {
+        if (!video) return video;
+        
+        const processedVideo = { ...video };
+        
+        console.log('Processing video response. Original URLs:', {
+            thumbnailUrl: processedVideo.thumbnailUrl,
+            videoUrl: processedVideo.videoUrl,
+            id: processedVideo.id
+        });
+        
+        if (processedVideo.thumbnailUrl) {
+            processedVideo.thumbnailUrl = this._getFullThumbnailUrl(processedVideo.thumbnailUrl);
+        }
+        
+        if (processedVideo.videoUrl) {
+            processedVideo.videoUrl = this._getFullVideoUrl(processedVideo.videoUrl);
+        }
+        
+        console.log('Processed video response. Updated URLs:', {
+            thumbnailUrl: processedVideo.thumbnailUrl,
+            videoUrl: processedVideo.videoUrl,
+            id: processedVideo.id
+        });
+        
+        return processedVideo;
     }
 
     convertToVideoResponse(video) {
-        const videoResponse = { ...video };
-        if (videoResponse.thumbnailUrl) {
-            videoResponse.thumbnailUrl = this._getFullThumbnailUrl(videoResponse.thumbnailUrl);
-        }
-        return videoResponse;
+        return this._processVideoResponse(video);
     }
 }
 

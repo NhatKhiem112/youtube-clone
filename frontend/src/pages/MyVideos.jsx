@@ -44,6 +44,7 @@ import InfoIcon from '@material-ui/icons/Info';
 import axios from 'axios';
 import authHeader from '../services/auth-header';
 import VideoService from '../services/video.service';
+import { useAuth } from '../context/AuthContext';
 import {
   FULL_SIDEBAR_WIDTH,
   MINI_SIDEBAR_WIDTH,
@@ -267,6 +268,7 @@ const MyVideos = () => {
   });
   const showFullSidebar = useMinWidthToShowFullSidebar();
   const showMiniSidebar = useShouldShowMiniSidebar();
+  const { isLoggedIn, currentUser } = useAuth();
 
   useEffect(() => {
     fetchMyVideos();
@@ -277,11 +279,20 @@ const MyVideos = () => {
       setLoading(true);
       const videos = await VideoService.getUserVideos();
       
+      // Debug logging to see what's in the video objects
+      console.log("Fetched videos:", videos);
+      
       // Fetch moderation status for videos with specific statuses
       const videosWithModerationInfo = await Promise.all(
         videos.map(async (video) => {
           // Log each video's thumbnail URL for debugging
-          console.log(`Video ${video.id} thumbnail URL: ${video.thumbnailUrl}`);
+          console.log(`Video ${video.id} details:`, {
+            thumbnailUrl: video.thumbnailUrl,
+            videoUrl: video.videoUrl,
+            id: video.id,
+            videoId: video.videoId,
+            title: video.title
+          });
           
           if (video.status === 'PENDING_REVIEW' || video.status === 'APPROVED' || video.status === 'REJECTED') {
             try {
@@ -396,7 +407,90 @@ const MyVideos = () => {
   };
 
   const handleWatchClick = (video) => {
-    history.push(`/watch/${video.id}`);
+    console.log('Watch video clicked:', video);
+    
+    // If the video has a videoUrl property
+    if (video.videoUrl) {
+      // For locally uploaded videos
+      if (video.videoUrl.includes('/videos/stream/') || video.videoUrl.includes('/videos/')) {
+        // Extract just the filename properly
+        let filename = '';
+        
+        // Split by '/' and get the last part
+        const parts = video.videoUrl.split('/');
+        filename = parts[parts.length - 1];
+        
+        // Clean up the filename if it contains server parts
+        if (filename.includes('localhost:8080')) {
+          console.log('Cleaning up filename with server parts:', filename);
+          filename = filename.split('localhost:8080').pop();
+          // Remove leading slash if present
+          if (filename.startsWith('/')) {
+            filename = filename.substring(1);
+          }
+        }
+        
+        // Always use the direct API endpoint defined in your backend - this should match what's in your VideoController
+        let fullVideoUrl = `http://localhost:8080/api/videos/stream/${filename}`;
+        
+        console.log('Using API endpoint URL:', fullVideoUrl);
+        
+        // Transform local video to match YouTube video structure before passing to watch page
+        const transformedVideo = {
+          id: video.id.toString(),
+          videoId: video.id.toString(),
+          snippet: {
+            title: video.title,
+            description: video.description || '',
+            thumbnails: {
+              default: { url: video.thumbnailUrl },
+              medium: { url: video.thumbnailUrl },
+              high: { url: video.thumbnailUrl }
+            },
+            channelTitle: video.username || currentUser?.username || 'Unknown',
+            publishedAt: video.createdAt
+          },
+          statistics: {
+            viewCount: video.viewCount || 0,
+            likeCount: video.likeCount || 0,
+            dislikeCount: video.dislikeCount || 0
+          },
+          // Add custom properties to identify as local video
+          isLocalVideo: true,
+          localVideoUrl: fullVideoUrl,
+          localVideoId: video.id
+        };
+        
+        console.log('Transformed video with URL:', fullVideoUrl);
+        
+        // Pass the transformed video to the watch page
+        history.push({
+          pathname: `/watch/${video.id}`,
+          state: { videoData: transformedVideo }
+        });
+        
+        // Add to watch history
+        if (VideoService) {
+          try {
+            VideoService.addToWatchHistory({
+              videoId: video.id.toString(),
+              title: video.title,
+              description: video.description || '',
+              thumbnailUrl: video.thumbnailUrl || '',
+              channelTitle: video.username || 'Unknown'
+            });
+          } catch (error) {
+            console.error('Error adding to watch history:', error);
+          }
+        }
+      } else {
+        // For YouTube videos, just use the regular watch page
+        history.push(`/watch/${video.id}`);
+      }
+    } else {
+      // No direct videoUrl, use the watch page
+      history.push(`/watch/${video.id}`);
+    }
   };
 
   const handleCloseNotification = () => {
@@ -550,12 +644,24 @@ const MyVideos = () => {
             <Grid item xs={12} sm={6} md={4} lg={3} key={video.id} style={{ paddingTop: 12, paddingBottom: 12 }}>
               <StyledCard>
                 <CardMediaWrapper>
+                  {/* Debug info - Remove in production */}
+                  {console.log(`Rendering video ${video.id} with thumbnailUrl:`, video.thumbnailUrl)}
                   <StyledCardMedia
                     component="img"
                     alt={video.title}
-                    image={video.thumbnailUrl || 'https://via.placeholder.com/320x180?text=No+Thumbnail'}
+                    image={video.thumbnailUrl ? 
+                      // Ensure thumbnail URL is properly formatted with backend URL
+                      (video.thumbnailUrl.startsWith('http') ? 
+                        video.thumbnailUrl : 
+                        `http://localhost:8080/api${video.thumbnailUrl}`) : 
+                      'https://via.placeholder.com/320x180?text=No+Thumbnail'
+                    }
                     title={video.title}
                     onClick={() => handleWatchClick(video)}
+                    // Debug attributes to check in DOM
+                    data-thumbnail-url={video.thumbnailUrl}
+                    data-video-id={video.id}
+                    data-video-url={video.videoUrl}
                   />
                   <Box 
                     position="absolute"

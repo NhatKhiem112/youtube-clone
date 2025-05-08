@@ -78,10 +78,20 @@ export const request = async (endpoint, options = {}) => {
   
   // If not in cache, make the API request
   try {
+    console.log(`Sending YouTube API request to ${endpoint} with params:`, params);
+    
+    // Add timeout to request to prevent hanging forever
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
     const response = await axios.get(`${BASE_URL}${endpoint}`, {
       ...options,
-      params
+      params,
+      signal: controller.signal
     });
+    
+    // Clear timeout since request completed
+    clearTimeout(timeoutId);
     
     // Cache the successful response
     // Different TTL based on content type
@@ -90,9 +100,48 @@ export const request = async (endpoint, options = {}) => {
       86400000; // 24 hours for other data (videos, channels, etc.)
     
     cache.set(cacheKey, response.data, ttl);
+    
+    // Add debugging info
+    console.log(`YouTube API request to ${endpoint} successful`);
+    
     return response;
   } catch (error) {
     console.error(`API request failed for ${endpoint}:`, error);
+    
+    // Detailed error logging
+    if (error.name === 'AbortError' || error.code === 'ECONNABORTED') {
+      console.error('Request timed out. The YouTube API is taking too long to respond.');
+    }
+    
+    // Kiểm tra lỗi cụ thể từ YouTube API
+    const errorDetails = error.response?.data?.error;
+    if (errorDetails) {
+      console.error('YouTube API error details:', errorDetails.message, errorDetails.status);
+      
+      // Nếu lỗi liên quan đến API key, thì ghi log chi tiết
+      if (errorDetails.message.includes('API key') || errorDetails.status === 'INVALID_ARGUMENT') {
+        console.error('Invalid API key. Please check your configuration.');
+      }
+      
+      // Nếu vượt quá quota
+      if (errorDetails.status === 'RESOURCE_EXHAUSTED') {
+        console.error('YouTube API quota exceeded. Please try again later.');
+      }
+    }
+    
+    // Try to return data from the cache even if it's expired as a fallback
+    const allCacheData = cache.data;
+    for (const key in allCacheData) {
+      if (key.startsWith(endpoint)) {
+        console.log('Returning expired cache data as fallback');
+        return { 
+          data: allCacheData[key].value, 
+          fromCache: true, 
+          isExpiredCache: true 
+        };
+      }
+    }
+    
     throw error;
   }
 };
@@ -102,4 +151,63 @@ export const clearCache = () => {
   cache.data = {};
   localStorage.removeItem('youtube_api_cache');
   console.log('API cache cleared');
+};
+
+// Hàm kiểm tra API key có hoạt động không
+export const validateApiKey = async () => {
+  try {
+    console.log('Validating YouTube API key:', API_KEY);
+    
+    // Thực hiện request đơn giản để kiểm tra API key
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    
+    const testResponse = await axios.get(`${BASE_URL}/videos`, {
+      params: {
+        part: 'snippet',
+        chart: 'mostPopular',
+        maxResults: 1,
+        key: API_KEY
+      },
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    console.log('API key validation successful:', testResponse.status);
+    return {
+      valid: true,
+      message: 'API key is valid'
+    };
+  } catch (error) {
+    console.error('API key validation failed:', error);
+    
+    let message = 'Unknown error validating API key';
+    let details = '';
+    
+    if (error.response) {
+      // Server responded with non-2xx status
+      if (error.response.data && error.response.data.error) {
+        const errorInfo = error.response.data.error;
+        message = errorInfo.message || 'API key error';
+        details = `Status: ${errorInfo.status || error.response.status}, Code: ${errorInfo.code || 'unknown'}`;
+      } else {
+        message = `HTTP Error: ${error.response.status}`;
+      }
+    } else if (error.request) {
+      // No response received
+      message = 'No response from YouTube API server';
+      details = 'Check your internet connection';
+    } else {
+      // Request setup error
+      message = error.message;
+    }
+    
+    return {
+      valid: false,
+      message,
+      details,
+      error
+    };
+  }
 };
